@@ -15,9 +15,9 @@ permissions:
 
 jobs:
   app-arm64:
-    name: Compositor.app (arm64, macOS 14+)
-    # Release build for Apple silicon (macOS 14.0+). Deployment target lowered from 26.0 to 14.0;
-    # the code only uses macOS 14.0 APIs (5 @available(macOS 14.0, *) gates, nothing higher).
+    name: Compositor.app (arm64, macOS 15+)
+    # Release build for Apple silicon (macOS 15.0+). Deployment target lowered from 26.0 to 15.0.
+    # macOS 15 is the practical floor: the code uses macOS 15-only APIs (ScrollPosition, CGPoint Hashable).
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -63,8 +63,8 @@ jobs:
           retention-days: 30
 
   app-x86_64:
-    name: Compositor.app (x86_64, macOS 14+)
-    # Release build for Intel Macs (macOS 14.0+), cross-compiled on the runner.
+    name: Compositor.app (x86_64, macOS 15+)
+    # Release build for Intel Macs (macOS 15.0+), cross-compiled on the runner.
     # Xcode 26.4-26.6 (Swift 6.3.x) crash in the SIL optimizer when cross-compiling Release
     # -O for x86_64, so earlier toolchains are tried first; 26.6 -Onone is the fallback.
     # Same approach as AlexBlack772's verified port.
