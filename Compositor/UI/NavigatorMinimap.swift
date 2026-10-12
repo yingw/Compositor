@@ -47,7 +47,7 @@ struct NavigatorMinimap: View {
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                 session.viewport.centerView(on: geometry.documentPoint(for: value.location), documentSize: document.size)
             })
-            .modifier(DefaultPointer())
+            .pointerStyle(.default)
             .accessibilityElement()
             .accessibilityLabel("Navigator")
             .accessibilityHint("Click or drag to move the view")
@@ -73,17 +73,6 @@ struct NavigatorMinimap: View {
             size = document?.size ?? .zero
             layers = document?.layers ?? []
             self.revision = revision
-        }
-    }
-}
-
-/// The plain arrow over the minimap. The pointer style exists only on macOS 15; earlier systems keep the default.
-private struct DefaultPointer: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 15.0, *) {
-            content.pointerStyle(.default)
-        } else {
-            content
         }
     }
 }
