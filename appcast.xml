@@ -7,7 +7,7 @@
       <pubDate>Sun, 11 Oct 2026 18:20:35 +0000</pubDate>
       <sparkle:version>45</sparkle:version>
       <sparkle:shortVersionString>1.4.10</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <link>https://github.com/robbietilton/Compositor/releases/tag/v1.4.10</link>
       <changes><![CDATA[Spot Healing and Content-Aware Fill rebuilt: edges and texture carry on through what's removed
 Import a folder of images as layers, from Import Image or by dropping it on the canvas, a tab or the Dock

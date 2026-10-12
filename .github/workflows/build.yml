@@ -1,0 +1,124 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  app-arm64:
+    name: Compositor.app (arm64, macOS 14+)
+    # Release build for Apple silicon (macOS 14.0+). Deployment target lowered from 26.0 to 14.0;
+    # the code only uses macOS 14.0 APIs (5 @available(macOS 14.0, *) gates, nothing higher).
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - name: Resolve Swift packages
+        run: >
+          xcodebuild -resolvePackageDependencies
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -onlyUsePackageVersionsFromResolvedFile
+
+      # Ad-hoc signed: fine for personal use; Gatekeeper wants a right-click Open the first time.
+      # arm64 does not hit the x86_64 cross-compile SIL-optimizer crash, so plain -O works.
+      - name: Build Release (arm64)
+        run: >
+          xcodebuild build
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -destination 'platform=macOS,arch=arm64'
+          -configuration Release
+          -derivedDataPath DerivedData
+          CODE_SIGN_IDENTITY=-
+          CODE_SIGNING_REQUIRED=NO
+          ENABLE_CODE_COVERAGE=NO
+          SWIFT_COMPILATION_MODE=incremental
+          SWIFT_OPTIMIZATION_LEVEL=-O
+
+      - name: Zip Compositor.app
+        run: >
+          cd DerivedData/Build/Products/Release
+          && ditto -c -k --keepParent Compositor.app Compositor-arm64.zip
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Compositor-arm64
+          path: DerivedData/Build/Products/Release/Compositor-arm64.zip
+          retention-days: 30
+
+  app-x86_64:
+    name: Compositor.app (x86_64, macOS 14+)
+    # Release build for Intel Macs (macOS 14.0+), cross-compiled on the runner.
+    # Xcode 26.4-26.6 (Swift 6.3.x) crash in the SIL optimizer when cross-compiling Release
+    # -O for x86_64, so earlier toolchains are tried first; 26.6 -Onone is the fallback.
+    # Same approach as AlexBlack772's verified port.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve Swift packages
+        run: >
+          xcodebuild -resolvePackageDependencies
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Build Release (x86_64)
+        run: |
+          for attempt in "Xcode_26.2 -O" "Xcode_26.5 -O" "Xcode_26.4.1 -O" "Xcode_26.6 -Onone"; do
+            set -- $attempt
+            xcode=$1; level=$2
+            echo "::group::Build with $xcode, SWIFT_OPTIMIZATION_LEVEL=$level"
+            sudo xcode-select -s "/Applications/$xcode.app"
+            if xcodebuild build \
+              -project Compositor.xcodeproj \
+              -scheme Compositor \
+              -destination 'platform=macOS,arch=x86_64' \
+              -configuration Release \
+              -derivedDataPath DerivedData \
+              CODE_SIGN_IDENTITY=- \
+              CODE_SIGNING_REQUIRED=NO \
+              ENABLE_CODE_COVERAGE=NO \
+              SWIFT_COMPILATION_MODE=incremental \
+              SWIFT_OPTIMIZATION_LEVEL=$level \
+              > build.log 2>&1; then
+              echo "::endgroup::"
+              echo "Built with $xcode, SWIFT_OPTIMIZATION_LEVEL=$level" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "Build failed with $xcode $level; last lines:"
+            tail -5 build.log
+            rm -rf DerivedData build.log
+          done
+          exit 1
+
+      - name: Zip Compositor.app
+        run: >
+          cd DerivedData/Build/Products/Release
+          && ditto -c -k --keepParent Compositor.app Compositor-x86_64.zip
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Compositor-x86_64
+          path: DerivedData/Build/Products/Release/Compositor-x86_64.zip
+          retention-days: 30
