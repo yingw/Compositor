@@ -64,6 +64,15 @@ jobs:
           done
           exit 1
 
+      # Re-sign the whole bundle in one pass so Sparkle (and any other embedded
+      # framework) shares the same ad-hoc signature as the main binary. Without this,
+      # dyld rejects Sparkle at launch with "different Team IDs".
+      - name: Ad-hoc re-sign app bundle
+        run: codesign --force --deep --sign - DerivedData/Build/Products/Release/Compositor.app
+
+      - name: Verify signature
+        run: codesign --verify --deep --strict DerivedData/Build/Products/Release/Compositor.app
+
       - name: Zip Compositor.app
         run: >
           cd DerivedData/Build/Products/Release
@@ -124,6 +133,15 @@ jobs:
             rm -rf DerivedData build.log
           done
           exit 1
+
+      # Re-sign the whole bundle in one pass so Sparkle (and any other embedded
+      # framework) shares the same ad-hoc signature as the main binary. Without this,
+      # dyld rejects Sparkle at launch with "different Team IDs".
+      - name: Ad-hoc re-sign app bundle
+        run: codesign --force --deep --sign - DerivedData/Build/Products/Release/Compositor.app
+
+      - name: Verify signature
+        run: codesign --verify --deep --strict DerivedData/Build/Products/Release/Compositor.app
 
       - name: Zip Compositor.app
         run: >
