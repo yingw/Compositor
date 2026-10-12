@@ -18,14 +18,13 @@ jobs:
     name: Compositor.app (arm64, macOS 15+)
     # Release build for Apple silicon (macOS 15.0+). Deployment target lowered from 26.0 to 15.0.
     # macOS 15 is the practical floor: the code uses macOS 15-only APIs (ScrollPosition, CGPoint Hashable).
+    # Xcode 26.6's Swift compiler can crash on this codebase in Release -O (SIL optimizer), so earlier
+    # toolchains are tried first; 26.6 -Onone is the guaranteed fallback.
     runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Select Xcode 26.6
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
       - name: Resolve Swift packages
         run: >
@@ -35,20 +34,35 @@ jobs:
           -onlyUsePackageVersionsFromResolvedFile
 
       # Ad-hoc signed: fine for personal use; Gatekeeper wants a right-click Open the first time.
-      # arm64 does not hit the x86_64 cross-compile SIL-optimizer crash, so plain -O works.
       - name: Build Release (arm64)
-        run: >
-          xcodebuild build
-          -project Compositor.xcodeproj
-          -scheme Compositor
-          -destination 'platform=macOS,arch=arm64'
-          -configuration Release
-          -derivedDataPath DerivedData
-          CODE_SIGN_IDENTITY=-
-          CODE_SIGNING_REQUIRED=NO
-          ENABLE_CODE_COVERAGE=NO
-          SWIFT_COMPILATION_MODE=incremental
-          SWIFT_OPTIMIZATION_LEVEL=-O
+        run: |
+          for attempt in "Xcode_26.2 -O" "Xcode_26.5 -O" "Xcode_26.4.1 -O" "Xcode_26.6 -Onone"; do
+            set -- $attempt
+            xcode=$1; level=$2
+            echo "::group::Build with $xcode, SWIFT_OPTIMIZATION_LEVEL=$level"
+            sudo xcode-select -s "/Applications/$xcode.app"
+            if xcodebuild build \
+              -project Compositor.xcodeproj \
+              -scheme Compositor \
+              -destination 'platform=macOS,arch=arm64' \
+              -configuration Release \
+              -derivedDataPath DerivedData \
+              CODE_SIGN_IDENTITY=- \
+              CODE_SIGNING_REQUIRED=NO \
+              ENABLE_CODE_COVERAGE=NO \
+              SWIFT_COMPILATION_MODE=incremental \
+              SWIFT_OPTIMIZATION_LEVEL=$level \
+              > build.log 2>&1; then
+              echo "::endgroup::"
+              echo "Built with $xcode, SWIFT_OPTIMIZATION_LEVEL=$level" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "Build failed with $xcode $level; last lines:"
+            tail -5 build.log
+            rm -rf DerivedData build.log
+          done
+          exit 1
 
       - name: Zip Compositor.app
         run: >
@@ -65,9 +79,7 @@ jobs:
   app-x86_64:
     name: Compositor.app (x86_64, macOS 15+)
     # Release build for Intel Macs (macOS 15.0+), cross-compiled on the runner.
-    # Xcode 26.4-26.6 (Swift 6.3.x) crash in the SIL optimizer when cross-compiling Release
-    # -O for x86_64, so earlier toolchains are tried first; 26.6 -Onone is the fallback.
-    # Same approach as AlexBlack772's verified port.
+    # macos-26 runners are Apple silicon, so x86_64 is built via generic destination + ARCHS override.
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -91,9 +103,11 @@ jobs:
             if xcodebuild build \
               -project Compositor.xcodeproj \
               -scheme Compositor \
-              -destination 'platform=macOS,arch=x86_64' \
+              -destination 'generic/platform=macOS' \
               -configuration Release \
               -derivedDataPath DerivedData \
+              ARCHS=x86_64 \
+              ONLY_ACTIVE_ARCH=NO \
               CODE_SIGN_IDENTITY=- \
               CODE_SIGNING_REQUIRED=NO \
               ENABLE_CODE_COVERAGE=NO \
